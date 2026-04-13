@@ -27,11 +27,22 @@ namespace Net.Myzuc.Minecraft.Common.Objects.Chunks
         {
             return InnerPalette.GetEntry(index, this);
         }
+
+        public void SetEntry(int index, int value, int bitsPerEntry)
+        {
+            if(InnerPalette.DoesRequireRebuilding(bitsPerEntry, IsBiomeBased))
+            {
+                throw new NotImplementedException();
+            }
+            
+            InnerPalette.SetEntry(index, value, this);
+        }
     }
 
     public interface IInnerPalette
     {
         public int GetEntry(int index, PalettedContainer parent);
+        public void SetEntry(int index, int value, PalettedContainer parent);
         public bool DoesRequireRebuilding(int newBitPerEntry, bool isBiome);
         
         public static IInnerPalette FromTypeArray(int[] typeArray, bool isBiome)
@@ -72,6 +83,11 @@ namespace Net.Myzuc.Minecraft.Common.Objects.Chunks
             return Value;
         }
 
+        public void SetEntry(int index, int value, PalettedContainer parent)
+        {
+            Value = value; // We assume that it's still the same value since we check for BPE before.
+        }
+
         public bool DoesRequireRebuilding(int newBitPerEntry, bool isBiome)
         {
             return newBitPerEntry != 0;
@@ -91,6 +107,11 @@ namespace Net.Myzuc.Minecraft.Common.Objects.Chunks
         {
             if (index >= 0 && index < Palette.Length) return Palette[index]; // Potentially useless check there since we should already check that outside
             return -1; 
+        }
+
+        public void SetEntry(int index, int value, PalettedContainer parent)
+        {
+            Palette[index] = value;
         }
 
         public bool DoesRequireRebuilding(int newBitPerEntry, bool isBiome)
@@ -120,6 +141,17 @@ namespace Net.Myzuc.Minecraft.Common.Objects.Chunks
             var bitIndex = index % entriesPerLong * parent.BitsPerEntry;
 
             return (int)((parent.DataArray[longIndex] >> bitIndex) & mask);
+        }
+
+        public void SetEntry(int index, int value, PalettedContainer parent)
+        {
+            var entriesPerLong = 64 / parent.BitsPerEntry;
+            var mask = ((long)1 << parent.BitsPerEntry) - 1;
+            var longIndex = index / entriesPerLong;
+            var bitIndex = index % entriesPerLong * parent.BitsPerEntry;
+
+            parent.DataArray[longIndex] &= ~(mask << bitIndex);
+            parent.DataArray[longIndex] |= (long)value << bitIndex;
         }
 
         public bool DoesRequireRebuilding(int newBitPerEntry, bool isBiome)
