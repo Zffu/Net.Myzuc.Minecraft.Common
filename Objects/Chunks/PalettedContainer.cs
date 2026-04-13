@@ -5,24 +5,33 @@ namespace Net.Myzuc.Minecraft.Common.Objects.Chunks
     /// </summary>
     public class PalettedContainer
     {
-        public byte BlockCount { get; set; }
+        public byte BitsPerEntry { get; set; }
         public bool IsBiomeBased { get; set; }
 
-        public IInnerPalette InnerPalette;
+        public IInnerPalette InnerPalette; // We make an inner to allow to destroy and recreate another without updating the PalettedContainer refs
+        
+        public long[] DataArray { get; set; }
 
-        public PalettedContainer(byte blockCount, bool isBiomeBased, int[] typeArray)
+        public PalettedContainer(int[] typeArray, bool isBiomeBased)
         {
-            BlockCount = blockCount;
+            BitsPerEntry = (byte) PaletteUtility.GetPaletteNeededBits(typeArray.Length);
             IsBiomeBased = isBiomeBased;
 
             InnerPalette = IInnerPalette.FromTypeArray(typeArray, isBiomeBased);
+
+            int entriesPerLong = 64 / BitsPerEntry;
+            DataArray = new long[typeArray.Length + (entriesPerLong - 1) / entriesPerLong];
         }
-        
+
+        public int GetEntry(int index)
+        {
+            return InnerPalette.GetEntry(index, this);
+        }
     }
 
     public interface IInnerPalette
     {
-        public int GetEntry(int index);
+        public int GetEntry(int index, PalettedContainer parent);
         public bool DoesRequireRebuilding(int newBitPerEntry, bool isBiome);
         
         public static IInnerPalette FromTypeArray(int[] typeArray, bool isBiome)
@@ -58,7 +67,7 @@ namespace Net.Myzuc.Minecraft.Common.Objects.Chunks
             Value = value;
         }
         
-        public int GetEntry(int index)
+        public int GetEntry(int index, PalettedContainer parent)
         {
             return Value;
         }
@@ -78,7 +87,7 @@ namespace Net.Myzuc.Minecraft.Common.Objects.Chunks
             Palette = palette;
         }
 
-        public int GetEntry(int index)
+        public int GetEntry(int index, PalettedContainer parent)
         {
             if (index >= 0 && index < Palette.Length) return Palette[index]; // Potentially useless check there since we should already check that outside
             return -1; 
@@ -103,10 +112,14 @@ namespace Net.Myzuc.Minecraft.Common.Objects.Chunks
             IsBiome = isBiome;
         }
         
-        public int GetEntry(int index)
+        public int GetEntry(int index, PalettedContainer parent)
         {
-            // TODO: add global 
-            throw new NotImplementedException();
+            var entriesPerLong = 64 / parent.BitsPerEntry;
+            var mask = ((long)1 << parent.BitsPerEntry) - 1;
+            var longIndex = index / entriesPerLong;
+            var bitIndex = index % entriesPerLong * parent.BitsPerEntry;
+
+            return (int)((parent.DataArray[longIndex] >> bitIndex) & mask);
         }
 
         public bool DoesRequireRebuilding(int newBitPerEntry, bool isBiome)
