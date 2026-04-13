@@ -5,9 +5,43 @@ namespace Net.Myzuc.Minecraft.Common.Objects.Chunks
     /// </summary>
     public class PalettedContainer
     {
-        public byte BlockCount { get; set; } = 0;
+        public byte BlockCount { get; set; }
+        public bool IsBiomeBased { get; set; }
+
+        public IInnerPalette InnerPalette;
+
+        public PalettedContainer(byte blockCount, bool isBiomeBased, int[] typeArray)
+        {
+            BlockCount = blockCount;
+            IsBiomeBased = isBiomeBased;
+
+            InnerPalette = IInnerPalette.FromTypeArray(typeArray, isBiomeBased);
+        }
+        
     }
 
+    public interface IInnerPalette
+    {
+        public int GetEntry(int index);
+        public bool DoesRequireRebuilding(int newBitPerEntry, bool isBiome);
+        
+        public static IInnerPalette FromTypeArray(int[] typeArray, bool isBiome)
+        {
+            if (typeArray.Length == 1) return new SingleValuedContainer(typeArray[0]);
+
+            var bitsPer = PaletteUtility.GetPaletteNeededBits(typeArray.Length);
+
+            if (isBiome)
+            {
+                if (bitsPer <= 3) return new IndirectContainer(typeArray);
+                return new DirectContainer(isBiome);
+            }
+
+            if (bitsPer <= 8) return new IndirectContainer(typeArray);
+            return new DirectContainer(isBiome);
+        }
+    }
+    
     public enum PaletteKind
     {
         SingleValued, // SingleValuedContainer
@@ -15,15 +49,75 @@ namespace Net.Myzuc.Minecraft.Common.Objects.Chunks
         Direct // void
     }
     
-    public class SingleValuedContainer
+    public class SingleValuedContainer: IInnerPalette
     {
-        public int Value { get; set; } = 0;
+        public int Value { get; set; }
+
+        public SingleValuedContainer(int value)
+        {
+            Value = value;
+        }
+        
+        public int GetEntry(int index)
+        {
+            return Value;
+        }
+
+        public bool DoesRequireRebuilding(int newBitPerEntry, bool isBiome)
+        {
+            return newBitPerEntry != 0;
+        }
     }
 
-    public class IndirectContainer
+    public class IndirectContainer: IInnerPalette
     {
-        public int PaletteLength { get; set; } = 0;
-        public int[] Palette { get; set; } = new int[] { };
+        public int[] Palette { get; set; }
+
+        public IndirectContainer(int[] palette)
+        {
+            Palette = palette;
+        }
+
+        public int GetEntry(int index)
+        {
+            if (index >= 0 && index < Palette.Length) return Palette[index]; // Potentially useless check there since we should already check that outside
+            return -1; 
+        }
+
+        public bool DoesRequireRebuilding(int newBitPerEntry, bool isBiome)
+        {
+            return isBiome switch
+            {
+                true => newBitPerEntry <= 3,
+                false => newBitPerEntry <= 8,
+            };
+        }
     }
-    
+
+    public class DirectContainer : IInnerPalette
+    {
+        public bool IsBiome { get; set; }
+
+        public DirectContainer(bool isBiome)
+        {
+            IsBiome = isBiome;
+        }
+        
+        public int GetEntry(int index)
+        {
+            // TODO: add global 
+            throw new NotImplementedException();
+        }
+
+        public bool DoesRequireRebuilding(int newBitPerEntry, bool isBiome)
+        {
+            // We can simply check here if the size is bigger than what we need for indirect to handle Notchian client
+            return isBiome switch
+            {
+                true => newBitPerEntry > 3,
+                false => newBitPerEntry > 8
+            };
+        }
+    }
+
 }
